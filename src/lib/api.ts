@@ -1,6 +1,6 @@
 // ─── Centralised API client ───────────────────────────────────────────────────
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
+const BASE = import.meta.env.VITE_API_URL ?? 'https://meta-backend-i9hs.onrender.com/api'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
