@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Loader2, KeyRound, MapPin, Phone } from 'lucide-react'
+import { Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Loader2, KeyRound, MapPin, Phone, ShieldCheck } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -24,15 +24,45 @@ export function AdminSettings() {
   const [contactSuccess, setContactSuccess] = useState('')
   const [contactError,   setContactError]   = useState('')
 
+  // ── Account verification toggle state ──────────────────────────────────────
+  const [verificationRequired,  setVerificationRequired] = useState(true)
+  const [verificationSaving,    setVerificationSaving]   = useState(false)
+  const [verificationMsg,       setVerificationMsg]      = useState('')
+  const [verificationMsgType,   setVerificationMsgType]  = useState<'ok' | 'err' | ''>('')
+
   // Load existing settings on mount
   useEffect(() => {
     adminApi.get<{ success: boolean; data: Record<string, string> }>('/admin/settings')
       .then(res => {
         setAddress(res.data.platform_address ?? '')
         setPhone(res.data.platform_phone   ?? '')
+        // Default to true when the key is missing
+        setVerificationRequired(res.data.account_verification_required !== 'false')
       })
       .catch(() => {/* silently ignore */})
   }, [])
+
+  async function toggleVerificationRequired(nextValue: boolean) {
+    setVerificationSaving(true); setVerificationMsg(''); setVerificationMsgType('')
+    // Optimistically reflect the new state
+    setVerificationRequired(nextValue)
+    try {
+      await adminApi.patch('/admin/settings/account_verification_required', {
+        value: nextValue ? 'true' : 'false',
+      })
+      setVerificationMsg(nextValue
+        ? 'Verification is now REQUIRED. New users must verify their email to activate.'
+        : 'Verification is now OFF. New registrations are auto-activated.')
+      setVerificationMsgType('ok')
+    } catch (err: any) {
+      // Roll back on failure
+      setVerificationRequired(!nextValue)
+      setVerificationMsg(err?.message ?? 'Failed to update setting.')
+      setVerificationMsgType('err')
+    } finally {
+      setVerificationSaving(false)
+    }
+  }
 
   async function handleContactSave(e: React.FormEvent) {
     e.preventDefault()
@@ -223,6 +253,87 @@ export function AdminSettings() {
             }
           </button>
         </form>
+      </div>
+
+      {/* ── Account Verification Toggle Card ── */}
+      <div style={{
+        background: 'hsl(260 60% 5%)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 14, overflow: 'hidden',
+        maxWidth: 560, marginBottom: 28,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 22px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '0.55rem', background: 'rgba(74,222,128,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ShieldCheck size={16} style={{ color: '#4ade80' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: 'hsl(40 6% 92%)' }}>Account Verification on Registration</p>
+            <p style={{ fontSize: 11, color: 'hsl(240 5% 50%)' }}>Require new users to verify their email before they can use the platform</p>
+          </div>
+        </div>
+
+        <div style={{ padding: '22px' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 16px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'hsl(40 6% 90%)', marginBottom: 3 }}>
+                {verificationRequired ? 'Verification Required' : 'Verification Off'}
+              </p>
+              <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', lineHeight: 1.5 }}>
+                {verificationRequired
+                  ? 'New users get a verification email and must click the link before their account becomes active.'
+                  : 'New users are instantly active after registration. No verification email is sent.'}
+              </p>
+            </div>
+
+            {/* Toggle switch */}
+            <button
+              type="button"
+              disabled={verificationSaving}
+              onClick={() => toggleVerificationRequired(!verificationRequired)}
+              aria-label={verificationRequired ? 'Turn off verification' : 'Turn on verification'}
+              style={{
+                position: 'relative', flexShrink: 0,
+                width: 46, height: 26, marginLeft: 16, padding: 0, borderRadius: 999,
+                cursor: verificationSaving ? 'not-allowed' : 'pointer',
+                background: verificationRequired ? 'rgba(74,222,128,0.5)' : 'rgba(120,120,120,0.4)',
+                border: verificationRequired ? '1px solid rgba(74,222,128,0.7)' : '1px solid rgba(255,255,255,0.15)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: 2, left: verificationRequired ? 22 : 2,
+                width: 20, height: 20, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.2s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              }} />
+            </button>
+          </div>
+
+          {verificationSaving && (
+            <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Saving…
+            </p>
+          )}
+
+          {verificationMsg && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 14px', borderRadius: 9, marginTop: 12,
+              background: verificationMsgType === 'ok' ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
+              border: verificationMsgType === 'ok' ? '1px solid rgba(74,222,128,0.25)' : '1px solid rgba(248,113,113,0.25)',
+            }}>
+              {verificationMsgType === 'ok'
+                ? <CheckCircle2 size={14} style={{ color: '#4ade80', flexShrink: 0 }} />
+                : <AlertTriangle size={14} style={{ color: '#f87171', flexShrink: 0 }} />}
+              <span style={{ fontSize: 12, color: verificationMsgType === 'ok' ? '#4ade80' : '#f87171' }}>{verificationMsg}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Change Password Card ── */}
