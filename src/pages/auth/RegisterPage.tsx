@@ -34,6 +34,7 @@ export default function RegisterPage() {
   const [step,    setStep]    = useState(0)
   const [loading, setLoading] = useState(false)
   const [done,    setDone]    = useState(false)
+  const [verificationRequired, setVerificationRequired] = useState(true)
   const [error,   setError]   = useState('')
   const [showPw,  setShowPw]  = useState(false)
   const [showCPw, setShowCPw] = useState(false)
@@ -109,7 +110,10 @@ export default function RegisterPage() {
     setLoading(true)
     setError('')
     try {
-      await api.post('/auth/register', {
+      const res = await api.post<{
+        success: boolean
+        data: { id: string; email: string; firstName: string; verificationRequired?: boolean }
+      }>('/auth/register', {
         firstName:    form.firstName,
         lastName:     form.lastName,
         email:        form.email,
@@ -119,6 +123,8 @@ export default function RegisterPage() {
         dateOfBirth:  form.dateOfBirth  || undefined,
         referralCode: form.referralCode || undefined,
       })
+      // Default to true if backend didn't include the flag (safer fallback)
+      setVerificationRequired(res.data?.verificationRequired !== false)
       setDone(true)
     } catch (e: any) {
       setError(e.message ?? 'Registration failed. Please try again.')
@@ -137,8 +143,16 @@ export default function RegisterPage() {
         </div>
         <h2 className="text-2xl font-semibold mb-2" style={{ color: 'hsl(40 6% 95%)' }}>Account Created!</h2>
         <p className="text-sm mb-6" style={{ color: 'hsl(240 5% 65%)' }}>
-          We've sent a verification link to <strong style={{ color: 'hsl(40 6% 90%)' }}>{form.email}</strong>.
-          Please check your inbox and verify before logging in.
+          {verificationRequired ? (
+            <>
+              We've sent a verification link to <strong style={{ color: 'hsl(40 6% 90%)' }}>{form.email}</strong>.
+              Please check your inbox and verify before logging in.
+            </>
+          ) : (
+            <>
+              Your account <strong style={{ color: 'hsl(40 6% 90%)' }}>{form.email}</strong> is ready. You can log in right away.
+            </>
+          )}
         </p>
         <button onClick={() => navigate('/login')}
           className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
