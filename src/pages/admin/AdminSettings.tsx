@@ -51,8 +51,8 @@ export function AdminSettings() {
         value: nextValue ? 'true' : 'false',
       })
       setVerificationMsg(nextValue
-        ? 'Verification is now REQUIRED. New users must verify their email to activate.'
-        : 'Verification is now OFF. New registrations are auto-activated.')
+        ? 'Verification is now REQUIRED. New users must verify email + submit KYC.'
+        : 'Verification is now OFF. New registrations are auto-activated with KYC approved.')
       setVerificationMsgType('ok')
     } catch (err: any) {
       // Roll back on failure
@@ -268,7 +268,7 @@ export function AdminSettings() {
           </div>
           <div>
             <p style={{ fontSize: 14, fontWeight: 700, color: 'hsl(40 6% 92%)' }}>Account Verification on Registration</p>
-            <p style={{ fontSize: 11, color: 'hsl(240 5% 50%)' }}>Require new users to verify their email before they can use the platform</p>
+            <p style={{ fontSize: 11, color: 'hsl(240 5% 50%)' }}>Require email verification + KYC before new users get full access</p>
           </div>
         </div>
 
@@ -285,8 +285,8 @@ export function AdminSettings() {
               </p>
               <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', lineHeight: 1.5 }}>
                 {verificationRequired
-                  ? 'New users get a verification email and must click the link before their account becomes active.'
-                  : 'New users are instantly active after registration. No verification email is sent.'}
+                  ? 'New users must verify their email and submit KYC documents before getting full access.'
+                  : 'New users are instantly active with KYC auto-approved. No email verification, no KYC prompt.'}
               </p>
             </div>
 
