@@ -58,7 +58,7 @@ export function VideoShowcaseSection() {
               lineHeight: 1.6,
             }}
           >
-            Watch how traders use MetaStoxPro to execute strategies, monitor markets, and grow their portfolios.
+            Watch how traders use Xyveral to execute strategies, monitor markets, and grow their portfolios.
           </p>
         </div>
 

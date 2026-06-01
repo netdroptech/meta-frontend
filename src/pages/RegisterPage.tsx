@@ -106,7 +106,7 @@ export function RegisterPage() {
               Create your account
             </h1>
             <p className="text-muted-foreground text-sm">
-              Join MetaStoxPro and start trading smarter.
+              Join Xyveral and start trading smarter.
             </p>
           </div>
 
