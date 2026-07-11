@@ -45,6 +45,46 @@ const METHODS = [
     fee: 'Network fee only',
     minAmount: '$50',
   },
+  {
+    id: 'bank',
+    label: 'Bank Transfer',
+    sub: 'ACH · 1–3 business days',
+    icon: '🏦',
+    iconBg: 'rgba(96,165,250,0.15)',
+    processingTime: '1–3 business days',
+    fee: 'No fees',
+    minAmount: '$100',
+  },
+  {
+    id: 'wire',
+    label: 'Wire Transfer',
+    sub: 'Domestic & international',
+    icon: '🌐',
+    iconBg: 'rgba(34,211,238,0.15)',
+    processingTime: '1–5 business days',
+    fee: '$25 wire fee',
+    minAmount: '$500',
+  },
+  {
+    id: 'paypal',
+    label: 'PayPal',
+    sub: 'Fast payout to your email',
+    icon: '🅿️',
+    iconBg: 'rgba(59,130,246,0.15)',
+    processingTime: 'Within 24 hours',
+    fee: '2% fee',
+    minAmount: '$50',
+  },
+  {
+    id: 'card',
+    label: 'Debit Card',
+    sub: 'Payout to your card',
+    icon: '💳',
+    iconBg: 'rgba(167,139,250,0.15)',
+    processingTime: '1–2 business days',
+    fee: '1.5% fee',
+    minAmount: '$50',
+  },
 ]
 
 const CRYPTO_COINS = ['Bitcoin (BTC)', 'Ethereum (ETH)', 'USDT (TRC-20)', 'USDT (ERC-20)', 'BNB (BEP-20)', 'Solana (SOL)']
@@ -52,6 +92,23 @@ const CRYPTO_COINS = ['Bitcoin (BTC)', 'Ethereum (ETH)', 'USDT (TRC-20)', 'USDT 
 
 function Card({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: 'hsl(260 60% 5%)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '0.875rem', ...style }}>{children}</div>
+}
+
+function Field({ label, placeholder, value, onChange, mono = false }: {
+  label: string; placeholder: string; value: string; onChange: (v: string) => void; mono?: boolean
+}) {
+  return (
+    <>
+      <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', marginBottom: 6 }}>{label}</p>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.625rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'hsl(40 6% 88%)', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: '0.875rem', fontFamily: mono ? 'monospace' : undefined }}
+      />
+    </>
+  )
 }
 
 export function WithdrawalFunds() {
@@ -62,6 +119,19 @@ export function WithdrawalFunds() {
   const [coinOpen, setCoinOpen] = useState(false)
   const [amount, setAmount]     = useState('')
   const [address, setAddress]   = useState('')
+
+  // Bank / wire fields
+  const [accountHolder, setAccountHolder] = useState('')
+  const [bankName, setBankName]           = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [routing, setRouting]             = useState('')
+  const [swift, setSwift]                 = useState('')
+  const [iban, setIban]                   = useState('')
+  // PayPal
+  const [paypalEmail, setPaypalEmail]     = useState('')
+  // Card
+  const [cardHolder, setCardHolder]       = useState('')
+  const [cardNumber, setCardNumber]       = useState('')
   const [step, setStep]         = useState<'form' | 'confirm' | 'code' | 'success'>('form')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -87,15 +157,35 @@ export function WithdrawalFunds() {
   const [totalWithdrawn, setTotalWithdrawn] = useState(0)
 
   // Admin-controlled method availability
-  const [cryptoEnabled,  setCryptoEnabled]  = useState(true)
+  const [cryptoEnabled, setCryptoEnabled] = useState(true)
+  const [bankEnabled,   setBankEnabled]   = useState(true)
+  const [wireEnabled,   setWireEnabled]   = useState(true)
+  const [paypalEnabled, setPaypalEnabled] = useState(true)
+  const [cardEnabled,   setCardEnabled]   = useState(true)
 
-  const enabledMethods = METHODS.filter(m =>
-    (m.id === 'crypto' && cryptoEnabled)
-  )
+  const methodEnabled: Record<string, boolean> = {
+    crypto: cryptoEnabled,
+    bank:   bankEnabled,
+    wire:   wireEnabled,
+    paypal: paypalEnabled,
+    card:   cardEnabled,
+  }
+
+  const enabledMethods = METHODS.filter(m => methodEnabled[m.id])
 
   const selected  = METHODS.find(m => m.id === method)!
   const balance   = user?.balance ?? 0
   const numAmount = parseFloat(amount) || 0
+
+  const mask4 = (v: string) => { const s = v.replace(/\s+/g, ''); return s.length > 4 ? `••••${s.slice(-4)}` : s }
+
+  // Method-appropriate destination summary shown on the confirm screen
+  function destinationRow(): { label: string; value: string } {
+    if (method === 'crypto') return { label: 'Address', value: address ? address.slice(0, 18) + '…' : '—' }
+    if (method === 'bank' || method === 'wire') return { label: 'To account', value: `${bankName} · ${mask4(accountNumber)}` }
+    if (method === 'paypal') return { label: 'PayPal', value: paypalEmail || '—' }
+    return { label: 'Card', value: mask4(cardNumber) }
+  }
 
   // ── Fetch withdrawal history ───────────────────────────────────────────────
   const fetchWithdrawals = useCallback(async () => {
@@ -112,12 +202,28 @@ export function WithdrawalFunds() {
 
   // ── Fetch admin-controlled method settings ────────────────────────────────
   useEffect(() => {
-    api.get<{ success: boolean; data: { cryptoEnabled: boolean } }>('/user/withdrawal-settings')
+    api.get<{ success: boolean; data: {
+      cryptoEnabled: boolean; bankEnabled?: boolean; wireEnabled?: boolean; paypalEnabled?: boolean; cardEnabled?: boolean
+    } }>('/user/withdrawal-settings')
       .then(res => {
-        setCryptoEnabled(res.data.cryptoEnabled)
+        const d = res.data
+        setCryptoEnabled(d.cryptoEnabled)
+        setBankEnabled(d.bankEnabled ?? true)
+        setWireEnabled(d.wireEnabled ?? true)
+        setPaypalEnabled(d.paypalEnabled ?? true)
+        setCardEnabled(d.cardEnabled ?? true)
       })
       .catch(() => { /* fail open */ })
   }, [])
+
+  // Keep the selected method valid — if it gets disabled, jump to the first enabled one
+  useEffect(() => {
+    if (!methodEnabled[method]) {
+      const first = METHODS.find(m => methodEnabled[m.id])
+      if (first) setMethod(first.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cryptoEnabled, bankEnabled, wireEnabled, paypalEnabled, cardEnabled])
 
   useEffect(() => { fetchWithdrawals() }, [fetchWithdrawals])
 
@@ -132,9 +238,30 @@ export function WithdrawalFunds() {
       setFormError(`Amount exceeds your available balance of ${fmt(balance)}.`)
       return
     }
-    if (method === 'crypto' && address.trim().length < 10) {
-      setFormError('Please enter a valid destination wallet address.')
-      return
+    if (method === 'crypto') {
+      if (address.trim().length < 10) {
+        setFormError('Please enter a valid destination wallet address.')
+        return
+      }
+    } else if (method === 'bank' || method === 'wire') {
+      if (!accountHolder.trim() || !bankName.trim() || accountNumber.trim().length < 4) {
+        setFormError('Please enter the account holder, bank name and account number.')
+        return
+      }
+      if (method === 'wire' && !swift.trim() && !routing.trim()) {
+        setFormError('Please provide a SWIFT/BIC or routing number for the wire.')
+        return
+      }
+    } else if (method === 'paypal') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail.trim())) {
+        setFormError('Please enter a valid PayPal email address.')
+        return
+      }
+    } else if (method === 'card') {
+      if (!cardHolder.trim() || cardNumber.replace(/\s+/g, '').length < 12) {
+        setFormError('Please enter the cardholder name and a valid card number.')
+        return
+      }
     }
     setStep('confirm')
   }
@@ -157,11 +284,24 @@ export function WithdrawalFunds() {
     setSubmitError('')
     try {
       await api.post('/user/withdrawal/submit', {
-        amount:        numAmount,
-        method:        'crypto',
+        amount: numAmount,
+        method,
         code,
+        // crypto
         coin,
         address,
+        // bank / wire
+        accountHolder,
+        bankName,
+        accountNumber,
+        routing,
+        swift,
+        iban,
+        // paypal
+        paypalEmail,
+        // card
+        cardHolder,
+        cardNumber,
       })
       // Await the refresh so data is ready when user returns to form view
       await fetchWithdrawals()
@@ -314,7 +454,7 @@ export function WithdrawalFunds() {
           <p style={{ fontSize: 13, color: 'hsl(240 5% 55%)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
             Your withdrawal request of <strong style={{ color: 'hsl(40 6% 85%)' }}>${numAmount.toFixed(2)}</strong> has been submitted and is pending review. You'll be notified once it's processed.
           </p>
-          <button onClick={() => { setStep('form'); setAmount(''); setAddress(''); setSubmitError(''); setCodeDigits(['','','','','']); setCodeError(''); setFormError(''); fetchWithdrawals() }} style={{ padding: '0.625rem 1.5rem', borderRadius: '0.625rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'hsl(40 6% 88%)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+          <button onClick={() => { setStep('form'); setAmount(''); setAddress(''); setAccountHolder(''); setBankName(''); setAccountNumber(''); setRouting(''); setSwift(''); setIban(''); setPaypalEmail(''); setCardHolder(''); setCardNumber(''); setSubmitError(''); setCodeDigits(['','','','','']); setCodeError(''); setFormError(''); fetchWithdrawals() }} style={{ padding: '0.625rem 1.5rem', borderRadius: '0.625rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'hsl(40 6% 88%)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
             New Withdrawal
           </button>
         </div>
@@ -378,7 +518,7 @@ export function WithdrawalFunds() {
               { label: 'Fee',         value: selected.fee },
               { label: 'You receive', value: `$${numAmount.toFixed(2)}` },
               { label: 'Processing',  value: selected.processingTime },
-              { label: 'Address', value: address.slice(0, 20) + '...' },
+              destinationRow(),
             ].map(r => (
               <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.625rem 0.875rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.5rem' }}>
                 <span style={{ fontSize: 12, color: 'hsl(240 5% 55%)' }}>{r.label}</span>
@@ -452,8 +592,9 @@ export function WithdrawalFunds() {
                 ))}
               </div>
 
-              {/* Crypto: address field + coin selector */}
-              <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', marginBottom: 6 }}>Select Coin</p>
+              {/* ── Crypto fields ─────────────────────────────────────────── */}
+              {method === 'crypto' && (<>
+                <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)', marginBottom: 6 }}>Select Coin</p>
                   <div style={{ position: 'relative', marginBottom: '1rem' }}>
                     <button onClick={() => setCoinOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', borderRadius: '0.625rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'hsl(40 6% 88%)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                       {coin}
@@ -476,10 +617,36 @@ export function WithdrawalFunds() {
                     onChange={e => { setAddress(e.target.value); setFormError('') }}
                     style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '0.625rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'hsl(40 6% 88%)', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: '0.875rem', fontFamily: 'monospace' }}
                   />
+              </>)}
+
+              {/* ── Bank / Wire fields ────────────────────────────────────── */}
+              {(method === 'bank' || method === 'wire') && (<>
+                <Field label="Account Holder Name" placeholder="Full name on the account" value={accountHolder} onChange={v => { setAccountHolder(v); setFormError('') }} />
+                <Field label="Bank Name" placeholder="e.g. Chase, Bank of America" value={bankName} onChange={v => { setBankName(v); setFormError('') }} />
+                <Field label="Account Number" placeholder="Account number" value={accountNumber} onChange={v => { setAccountNumber(v); setFormError('') }} mono />
+                {method === 'bank' ? (
+                  <Field label="Routing Number (ACH)" placeholder="9-digit routing number" value={routing} onChange={v => { setRouting(v); setFormError('') }} mono />
+                ) : (<>
+                  <Field label="SWIFT / BIC" placeholder="8–11 character SWIFT/BIC code" value={swift} onChange={v => { setSwift(v); setFormError('') }} mono />
+                  <Field label="IBAN (international)" placeholder="IBAN — optional for domestic wires" value={iban} onChange={v => { setIban(v); setFormError('') }} mono />
+                  <Field label="Routing Number" placeholder="Routing number — for domestic wires" value={routing} onChange={v => { setRouting(v); setFormError('') }} mono />
+                </>)}
+              </>)}
+
+              {/* ── PayPal fields ─────────────────────────────────────────── */}
+              {method === 'paypal' && (
+                <Field label="PayPal Email" placeholder="you@example.com" value={paypalEmail} onChange={v => { setPaypalEmail(v); setFormError('') }} />
+              )}
+
+              {/* ── Card fields ───────────────────────────────────────────── */}
+              {method === 'card' && (<>
+                <Field label="Cardholder Name" placeholder="Name on card" value={cardHolder} onChange={v => { setCardHolder(v); setFormError('') }} />
+                <Field label="Card Number" placeholder="•••• •••• •••• ••••" value={cardNumber} onChange={v => { setCardNumber(v); setFormError('') }} mono />
+              </>)}
 
               {(() => {
-                const hardDisabled = !cryptoEnabled
-                const label = !cryptoEnabled ? 'Method Unavailable' : 'Review Withdrawal'
+                const hardDisabled = !methodEnabled[method]
+                const label = !methodEnabled[method] ? 'Method Unavailable' : 'Review Withdrawal'
                 return (
                   <>
                     {formError && (
