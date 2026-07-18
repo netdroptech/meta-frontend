@@ -33,7 +33,7 @@ const NAV = [
     section: 'TRADING & MARKETS',
     items: [
       { label: 'Live Markets',      path: '/dashboard/markets',           icon: Activity,  badge: { label: 'Live',    color: '#7c3aed', bg: 'rgba(124,58,237,0.15)' } },
-      { label: 'Copy Trading',      path: '/dashboard/copy-trading',      icon: Copy,      badge: { label: 'Pro',     color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' } },
+      { label: 'Copy Traders',      path: '/dashboard/copy-trading',      icon: Copy,      badge: { label: 'Pro',     color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' } },
       { label: 'AI Trading Bots',   path: '/dashboard/ai-bots',           icon: Bot,       badge: { label: 'AI',      color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' } },
     ],
   },
