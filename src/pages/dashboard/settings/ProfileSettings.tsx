@@ -36,11 +36,11 @@ export function ProfileSettings() {
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
   const [form, setForm] = useState({
-    displayName: 'Edwin',
-    username:    'edwin_apex',
+    displayName: 'John Doe',
+    username:    'johndoe_apex',
     bio:         'Investor & trader. Building wealth one asset at a time.',
-    twitter:     '@edwintrader',
-    linkedin:    'linkedin.com/in/edwin',
+    twitter:     '@johndoetrader',
+    linkedin:    'linkedin.com/in/johndoe',
     website:     '',
   })
 
@@ -82,7 +82,7 @@ export function ProfileSettings() {
               background: 'linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 28, fontWeight: 800, color: '#050505',
-            }}>E</div>
+            }}>JD</div>
             <button style={{
               position: 'absolute', bottom: 0, right: 0,
               width: 26, height: 26, borderRadius: '50%',
