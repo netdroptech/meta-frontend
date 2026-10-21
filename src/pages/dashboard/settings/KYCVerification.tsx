@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { ArrowLeft, Upload, CheckCircle2, Clock, AlertCircle, ChevronRight, FileText, Camera, User, Shield } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Upload, CheckCircle2, Clock, AlertCircle, ChevronRight, FileText, Camera, User, Shield, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/context/AuthContext'
+import { api } from '@/lib/api'
 
 const STEPS = ['Personal Details', 'ID Document', 'Selfie Verification', 'Review']
 
@@ -59,13 +61,62 @@ const inputStyle: React.CSSProperties = {
   width: '100%', height: 42, padding: '0 14px',
   borderRadius: 10, fontSize: 13, background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.09)', color: 'hsl(40 6% 90%)',
-  outline: 'none', boxSizing: 'border-box',
+  outline: 'none', boxSizing: 'border-box', colorScheme: 'dark',
 }
 
 export function KYCVerification() {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [docType, setDocType] = useState('passport')
+  const { user, refreshUser } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
+
+  // Personal details start from the user's own account info (blank where not set)
+  const [details, setDetails] = useState({ firstName: '', lastName: '', dateOfBirth: '', nationality: '' })
+  useEffect(() => {
+    if (!user) return
+    setDetails({
+      firstName:   user.firstName ?? '',
+      lastName:    user.lastName  ?? '',
+      dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
+      nationality: user.nationality ?? '',
+    })
+  }, [user])
+  const setDetail = (k: keyof typeof details) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError('')
+    setDetails(d => ({ ...d, [k]: e.target.value }))
+  }
+
+  // Save edited personal details to the user's account before moving past step 1
+  async function saveDetailsAndContinue() {
+    setError('')
+    if (!details.firstName.trim() || !details.lastName.trim()) { setError('First and last name are required.'); return }
+    const unchanged =
+      details.firstName   === (user?.firstName ?? '') &&
+      details.lastName    === (user?.lastName  ?? '') &&
+      details.dateOfBirth === (user?.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '') &&
+      details.nationality === (user?.nationality ?? '')
+    if (!unchanged) {
+      setSaving(true)
+      try {
+        await api.patch('/user/profile', details)
+        await refreshUser()
+      } catch (e: any) {
+        setError(e?.message ?? 'Could not save your details.')
+        return
+      } finally {
+        setSaving(false)
+      }
+    }
+    setStep(1)
+  }
+
+  function handleNext() {
+    if (step === 0) { saveDetailsAndContinue(); return }
+    if (step < STEPS.length - 1) setStep(s => s + 1)
+  }
+  const fullName = `${details.firstName} ${details.lastName}`.trim()
 
   const DOC_TYPES = [
     { id: 'passport', label: 'Passport', icon: '🛂' },
@@ -131,10 +182,15 @@ export function KYCVerification() {
             <p style={{ fontSize: 14, fontWeight: 700, color: 'hsl(40 10% 94%)', marginBottom: 4 }}>Personal Details</p>
             <p style={{ fontSize: 12, color: 'hsl(240 5% 52%)', marginBottom: 20 }}>Enter your details exactly as they appear on your government-issued ID.</p>
             <div className="grid sm:grid-cols-2 gap-4">
-              {[['Legal First Name','John'],['Legal Last Name','Doe'],['Date of Birth',''],['Nationality','Nigerian']].map(([label, ph]) => (
-                <div key={label}>
+              {([
+                { key: 'firstName',   label: 'Legal First Name', type: 'text' },
+                { key: 'lastName',    label: 'Legal Last Name',  type: 'text' },
+                { key: 'dateOfBirth', label: 'Date of Birth',    type: 'date' },
+                { key: 'nationality', label: 'Nationality',      type: 'text' },
+              ] as const).map(({ key, label, type }) => (
+                <div key={key}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(240 5% 50%)', marginBottom: 6, letterSpacing: '0.05em', textTransform: 'uppercase' as const }}>{label}</label>
-                  <input style={inputStyle} placeholder={ph} />
+                  <input type={type} style={inputStyle} value={details[key]} onChange={setDetail(key)} maxLength={type === 'text' ? 60 : undefined} max={type === 'date' ? new Date().toISOString().slice(0, 10) : undefined} />
                 </div>
               ))}
             </div>
@@ -180,8 +236,8 @@ export function KYCVerification() {
             <p style={{ fontSize: 14, fontWeight: 700, color: 'hsl(40 10% 94%)', marginBottom: 4 }}>Review & Submit</p>
             <p style={{ fontSize: 12, color: 'hsl(240 5% 52%)', marginBottom: 20 }}>Please review your submitted information before sending.</p>
             {[
-              { label: 'Full Name',     value: 'John Doe',      icon: User },
-              { label: 'Document Type',value: 'Passport',      icon: FileText },
+              { label: 'Full Name',     value: fullName || '—', icon: User },
+              { label: 'Document Type', value: DOC_TYPES.find(d => d.id === docType)?.label ?? '', icon: FileText },
               { label: 'Selfie',        value: '1 photo uploaded', icon: Camera },
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -201,12 +257,13 @@ export function KYCVerification() {
         )}
       </div>
 
+      {error && <p style={{ fontSize: 12, color: '#f87171', textAlign: 'right', marginBottom: 10 }}>{error}</p>}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <button onClick={() => step > 0 ? setStep(s => s - 1) : navigate(-1)} style={{ padding: '10px 22px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           {step === 0 ? 'Cancel' : '← Back'}
         </button>
-        <button onClick={() => step < STEPS.length - 1 ? setStep(s => s + 1) : null} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, background: step === STEPS.length - 1 ? 'linear-gradient(135deg,#8b5cf6,#7c3aed)' : 'linear-gradient(135deg,#7c3aed,#6d28d9)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-          {step === STEPS.length - 1 ? '🚀 Submit Verification' : <>Continue <ChevronRight size={14} /></>}
+        <button onClick={handleNext} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, background: step === STEPS.length - 1 ? 'linear-gradient(135deg,#8b5cf6,#7c3aed)' : 'linear-gradient(135deg,#7c3aed,#6d28d9)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+          {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : step === STEPS.length - 1 ? '🚀 Submit Verification' : <>Continue <ChevronRight size={14} /></>}
         </button>
       </div>
     </div>
