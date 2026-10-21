@@ -10,7 +10,13 @@ export interface AuthUser {
   lastName:    string
   phone?:      string
   country?:    string
-  avatarUrl?:  string
+  avatarUrl?:  string | null
+  username?:   string | null
+  bio?:        string | null
+  twitter?:    string | null
+  linkedin?:   string | null
+  website?:    string | null
+  dashboardTheme?: string | null
   status:      string
   kycStatus:   string
   plan:        string
