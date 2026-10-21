@@ -17,6 +17,13 @@ export interface AuthUser {
   linkedin?:   string | null
   website?:    string | null
   dashboardTheme?: string | null
+  dateOfBirth?: string | null
+  nationality?: string | null
+  occupation?:  string | null
+  address?:     string | null
+  city?:        string | null
+  state?:       string | null
+  postalCode?:  string | null
   status:      string
   kycStatus:   string
   plan:        string
