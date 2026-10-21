@@ -10,8 +10,8 @@ const inputStyle: React.CSSProperties = {
 }
 
 const SESSIONS = [
-  { id: 1, device: 'Chrome on macOS',       location: 'Lagos, Nigeria',   time: 'Active now',    current: true  },
-  { id: 2, device: 'Safari on iPhone 15',   location: 'Abuja, Nigeria',   time: '2 hours ago',   current: false },
+  { id: 1, device: 'Chrome on macOS',       location: 'London, UK',   time: 'Active now',    current: true  },
+  { id: 2, device: 'Safari on iPhone 15',   location: 'London, UK',   time: '2 hours ago',   current: false },
   { id: 3, device: 'Chrome on Windows 11',  location: 'London, UK',       time: '3 days ago',    current: false },
 ]
 
@@ -216,7 +216,7 @@ export function Security2FA() {
       </Section>
 
       {/* Active Sessions */}
-      <Section title="Active Sessions" sub="Devices currently signed into your account">
+      {/* <Section title="Active Sessions" sub="Devices currently signed into your account">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {SESSIONS.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: s.current ? 'rgba(167,139,250,0.04)' : 'rgba(255,255,255,0.02)', border: `1px solid ${s.current ? 'rgba(167,139,250,0.12)' : 'rgba(255,255,255,0.06)'}`, flexWrap: 'wrap' }}>
@@ -241,7 +241,7 @@ export function Security2FA() {
         <button style={{ marginTop: 14, width: '100%', padding: '10px', borderRadius: 10, background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', color: '#f87171', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
           <LogOut size={14} /> Sign Out All Other Sessions
         </button>
-      </Section>
+      </Section> */}
     </div>
   )
 }
