@@ -1,37 +1,35 @@
-import { useState } from 'react'
-import { ArrowLeft, CreditCard, Plus, Trash2, CheckCircle2, Building2, Bitcoin, Star, MoreVertical } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Plus, Trash2, CheckCircle2, Clock, AlertCircle, Wallet, Loader2, X, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/context/AuthContext'
+import { api } from '@/lib/api'
 
-interface Card { id: number; brand: string; last4: string; expiry: string; primary: boolean }
-interface Bank { id: number; name: string; account: string; routing: string; primary: boolean }
-interface Crypto { id: number; symbol: string; label: string; address: string; color: string }
+interface UserWallet { id: string; network: string; label: string | null; address: string; createdAt: string }
 
-const INITIAL_CARDS: Card[] = [
-  { id: 1, brand: 'Visa',       last4: '4242', expiry: '09/27', primary: true  },
-  { id: 2, brand: 'Mastercard', last4: '8810', expiry: '03/26', primary: false },
+// Must match USER_WALLET_NETWORKS on the backend
+const NETWORKS = [
+  'BTC', 'ETH (ERC-20)', 'USDT (TRC-20)', 'USDT (ERC-20)', 'USDT (BEP-20)',
+  'USDC (ERC-20)', 'BNB (BEP-20)', 'SOL', 'LTC', 'TRX', 'XRP', 'DOGE',
 ]
 
-const INITIAL_BANKS: Bank[] = [
-  { id: 1, name: 'Chase Bank',       account: '••••••7890', routing: '••••0021', primary: true  },
-  { id: 2, name: 'Bank of America',  account: '••••••3344', routing: '••••0026', primary: false },
-]
+const NETWORK_COLORS: Record<string, string> = {
+  BTC: '#f7931a', ETH: '#627eea', USDT: '#26a17b', USDC: '#2775ca', BNB: '#f3ba2f',
+  SOL: '#9945ff', LTC: '#345d9d', TRX: '#ef0027', XRP: '#23292f', DOGE: '#c2a633',
+}
+const colorFor = (network: string) => NETWORK_COLORS[network.split(' ')[0]] ?? '#a78bfa'
 
-const CRYPTOS: Crypto[] = [
-  { id: 1, symbol: 'BTC', label: 'Bitcoin',  address: 'bc1qxy2kgdygjrsqtzq2n0yrf...', color: '#f7931a' },
-  { id: 2, symbol: 'ETH', label: 'Ethereum', address: '0x71C7656EC7ab88b098defB...', color: '#627eea' },
-  { id: 3, symbol: 'USDT', label: 'Tether',  address: 'TQnz6fB5X7c5X5XQ5R...', color: '#26a17b' },
-]
-
-const CARD_COLORS: Record<string, string> = {
-  Visa: 'linear-gradient(135deg,#1a1f71,#2563eb)',
-  Mastercard: 'linear-gradient(135deg,#eb001b,#f79e1b)',
-  Amex: 'linear-gradient(135deg,#007bc1,#00a8e0)',
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 42, padding: '0 14px',
+  borderRadius: 10, fontSize: 13, fontWeight: 500,
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.09)',
+  color: 'hsl(40 6% 90%)', outline: 'none', boxSizing: 'border-box',
 }
 
 function Section({ title, sub, action, children }: { title: string; sub?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ background: 'hsl(260 60% 5%)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 24, marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, gap: 12 }}>
         <div>
           <p style={{ fontSize: 14, fontWeight: 700, color: 'hsl(40 10% 94%)' }}>{title}</p>
           {sub && <p style={{ fontSize: 12, color: 'hsl(240 5% 52%)', marginTop: 2 }}>{sub}</p>}
@@ -44,22 +42,93 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
   )
 }
 
-function AddBtn({ onClick, label }: { onClick: () => void; label: string }) {
+function Label({ children }: { children: React.ReactNode }) {
+  return <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(240 5% 50%)', marginBottom: 6, letterSpacing: '0.05em', textTransform: 'uppercase' as const }}>{children}</label>
+}
+
+function KycBanner({ status }: { status?: string }) {
+  const navigate = useNavigate()
+  const map: Record<string, { title: string; text: string; color: string; icon: React.ElementType; action?: string }> = {
+    APPROVED:      { title: 'Identity Verified',        text: 'Your identity has been verified.',                                  color: '#a78bfa', icon: CheckCircle2 },
+    PENDING:       { title: 'Verification Under Review', text: 'Your documents have been submitted and are being reviewed.',       color: '#f59e0b', icon: Clock },
+    REJECTED:      { title: 'Verification Rejected',     text: 'Your verification was not approved. Please resubmit your documents.', color: '#f87171', icon: AlertCircle, action: 'Resubmit' },
+    NOT_SUBMITTED: { title: 'Identity Not Verified',     text: 'Verify your identity to unlock all account features.',             color: '#f59e0b', icon: AlertCircle, action: 'Verify now' },
+  }
+  const b = map[status ?? 'NOT_SUBMITTED'] ?? map.NOT_SUBMITTED
+  const Icon = b.icon
   return (
-    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', color: '#c4b5fd', cursor: 'pointer', flexShrink: 0 }}>
-      <Plus size={13} /> {label}
-    </button>
+    <div style={{ background: `${b.color}0f`, border: `1px solid ${b.color}33`, borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <Icon size={18} style={{ color: b.color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: b.color }}>{b.title}</p>
+        <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)' }}>{b.text}</p>
+      </div>
+      {b.action && (
+        <button onClick={() => navigate('/dashboard/settings/kyc')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, background: `${b.color}1f`, border: `1px solid ${b.color}4d`, color: b.color, cursor: 'pointer' }}>
+          {b.action} <ChevronRight size={13} />
+        </button>
+      )}
+    </div>
   )
 }
 
 export function PaymentMethods() {
   const navigate = useNavigate()
-  const [cards, setCards] = useState<Card[]>(INITIAL_CARDS)
-  const [banks, setBanks] = useState<Bank[]>(INITIAL_BANKS)
-  const [menuId, setMenuId] = useState<string | null>(null)
+  const { user } = useAuth()
 
-  const setPrimary = (list: Card[], id: number) => list.map(c => ({ ...c, primary: c.id === id }))
-  const setPrimaryBank = (list: Bank[], id: number) => list.map(b => ({ ...b, primary: b.id === id }))
+  const [wallets, setWallets]   = useState<UserWallet[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const [adding, setAdding]     = useState(false)
+  const [network, setNetwork]   = useState('')
+  const [address, setAddress]   = useState('')
+  const [label, setLabel]       = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [formError, setFormError] = useState('')
+
+  const [confirmId, setConfirmId]   = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get<{ success: boolean; data: UserWallet[] }>('/user/wallets')
+      .then(res => setWallets(res.data))
+      .catch((e: any) => setLoadError(e?.message ?? 'Could not load your wallets.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function closeForm() {
+    setAdding(false); setNetwork(''); setAddress(''); setLabel(''); setFormError('')
+  }
+
+  async function handleAdd() {
+    setFormError('')
+    if (!network) { setFormError('Choose a network.'); return }
+    if (!address.trim()) { setFormError('Enter your wallet address.'); return }
+    setSaving(true)
+    try {
+      const res = await api.post<{ success: boolean; data: UserWallet }>('/user/wallets', { network, address: address.trim(), label: label.trim() })
+      setWallets(w => [...w, res.data])
+      closeForm()
+    } catch (e: any) {
+      setFormError(e?.message ?? 'Could not add wallet.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    try {
+      await api.delete(`/user/wallets/${id}`)
+      setWallets(w => w.filter(x => x.id !== id))
+    } catch (e: any) {
+      setLoadError(e?.message ?? 'Could not remove wallet.')
+    } finally {
+      setDeletingId(null)
+      setConfirmId(null)
+    }
+  }
 
   return (
     <div className="p-4 md:p-6 max-w-[760px] mx-auto overflow-x-hidden">
@@ -69,119 +138,101 @@ export function PaymentMethods() {
         </button>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'hsl(40 10% 96%)' }}>Payment Methods</h1>
-          <p style={{ fontSize: 13, color: 'hsl(240 5% 52%)' }}>Manage your cards, bank accounts and crypto wallets</p>
+          <p style={{ fontSize: 13, color: 'hsl(240 5% 52%)' }}>Manage your crypto wallets</p>
         </div>
       </div>
 
-      {/* Limits Banner */}
-      <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <CheckCircle2 size={18} style={{ color: '#a78bfa', flexShrink: 0 }} />
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#a78bfa' }}>Identity Verified</p>
-          <p style={{ fontSize: 11, color: 'hsl(240 5% 55%)' }}>You have full access to all payment methods and limits.</p>
-        </div>
-      </div>
-
-      {/* Cards */}
-      <Section title="Debit / Credit Cards" sub="Add cards for instant deposits and withdrawals" action={<AddBtn onClick={() => {}} label="Add Card" />}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {cards.map(card => (
-            <div key={card.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              {/* Mini card visual */}
-              <div style={{ width: 70, height: 44, borderRadius: 8, background: CARD_COLORS[card.brand] || 'linear-gradient(135deg,#334155,#1e293b)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '6px 8px', flexShrink: 0 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.9)', letterSpacing: 1 }}>•••• {card.last4}</p>
-                <p style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>{card.brand}</p>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: 'hsl(40 6% 88%)' }}>{card.brand} ending ••{card.last4}</p>
-                  {card.primary && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>Primary</span>}
-                </div>
-                <p style={{ fontSize: 11, color: 'hsl(240 5% 48%)', marginTop: 2 }}>Expires {card.expiry}</p>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {!card.primary && (
-                  <button onClick={() => setCards(prev => setPrimary(prev, card.id))} style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', cursor: 'pointer' }}>
-                    Set Primary
-                  </button>
-                )}
-                <button onClick={() => setCards(prev => prev.filter(c => c.id !== card.id))} style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <Trash2 size={13} style={{ color: '#f87171' }} />
-                </button>
-              </div>
-            </div>
-          ))}
-          {cards.length === 0 && (
-            <p style={{ fontSize: 12, color: 'hsl(240 5% 48%)', textAlign: 'center', padding: '16px 0' }}>No cards added yet.</p>
-          )}
-        </div>
-      </Section>
-
-      {/* Bank Accounts */}
-      <Section title="Bank Accounts" sub="Connect bank accounts for ACH transfers" action={<AddBtn onClick={() => {}} label="Add Bank" />}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {banks.map(bank => (
-            <div key={bank.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Building2 size={18} style={{ color: '#60a5fa' }} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: 'hsl(40 6% 88%)' }}>{bank.name}</p>
-                  {bank.primary && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', color: '#a78bfa' }}>Primary</span>}
-                </div>
-                <p style={{ fontSize: 11, color: 'hsl(240 5% 48%)', marginTop: 2 }}>Account {bank.account} · Routing {bank.routing}</p>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {!bank.primary && (
-                  <button onClick={() => setBanks(prev => setPrimaryBank(prev, bank.id))} style={{ fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', cursor: 'pointer' }}>
-                    Set Primary
-                  </button>
-                )}
-                <button onClick={() => setBanks(prev => prev.filter(b => b.id !== bank.id))} style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <Trash2 size={13} style={{ color: '#f87171' }} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
+      <KycBanner status={user?.kycStatus} />
 
       {/* Crypto Wallets */}
-      <Section title="Crypto Wallets" sub="Deposit and withdraw using crypto addresses" action={<AddBtn onClick={() => {}} label="Add Wallet" />}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {CRYPTOS.map(w => (
-            <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${w.color}1a`, border: `1px solid ${w.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Bitcoin size={18} style={{ color: w.color }} />
+      <Section
+        title="Crypto Wallets"
+        sub="Save the wallet addresses you want to use for withdrawals"
+        action={!adding && (
+          <button onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', color: '#c4b5fd', cursor: 'pointer', flexShrink: 0 }}>
+            <Plus size={13} /> Add Wallet
+          </button>
+        )}
+      >
+        {/* Add form */}
+        {adding && (
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'hsl(40 6% 88%)' }}>Add a wallet</p>
+              <button onClick={closeForm} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(240 5% 55%)', display: 'flex' }}><X size={16} /></button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4" style={{ marginBottom: 14 }}>
+              <div>
+                <Label>Network</Label>
+                <select value={network} onChange={e => { setNetwork(e.target.value); setFormError('') }} style={{ ...inputStyle, appearance: 'none' }}>
+                  <option value="" style={{ background: 'hsl(260 87% 6%)' }}></option>
+                  {NETWORKS.map(n => <option key={n} value={n} style={{ background: 'hsl(260 87% 6%)' }}>{n}</option>)}
+                </select>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: 'hsl(40 6% 88%)' }}>{w.label} ({w.symbol})</p>
-                <p style={{ fontSize: 11, color: 'hsl(240 5% 48%)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.address}</p>
+              <div>
+                <Label>Label (optional)</Label>
+                <input value={label} onChange={e => setLabel(e.target.value)} maxLength={40} style={inputStyle} />
               </div>
-              <button style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                <Trash2 size={13} style={{ color: '#f87171' }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Label>Wallet Address</Label>
+              <input value={address} onChange={e => { setAddress(e.target.value); setFormError('') }} maxLength={120} spellCheck={false} autoComplete="off" style={{ ...inputStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }} />
+              <p style={{ fontSize: 11, color: 'hsl(240 5% 45%)', marginTop: 6 }}>Double-check the address and network. Funds sent to a wrong address can't be recovered.</p>
+            </div>
+            {formError && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 10 }}>{formError}</p>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={closeForm} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleAdd} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                {saving && <Loader2 size={13} className="animate-spin" />} {saving ? 'Saving…' : 'Save Wallet'}
               </button>
             </div>
-          ))}
-        </div>
-      </Section>
+          </div>
+        )}
 
-      {/* Limits Overview */}
-      <Section title="Transaction Limits" sub="Your current deposit and withdrawal limits">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Daily Deposit',    value: '$50,000' },
-            { label: 'Daily Withdraw',   value: '$25,000' },
-            { label: 'Monthly Deposit',  value: '$500,000' },
-            { label: 'Monthly Withdraw', value: '$250,000' },
-          ].map(l => (
-            <div key={l.label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
-              <p style={{ fontSize: 11, color: 'hsl(240 5% 50%)', marginBottom: 4 }}>{l.label}</p>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#a78bfa' }}>{l.value}</p>
-            </div>
-          ))}
-        </div>
+        {loadError && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 12 }}>{loadError}</p>}
+
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0', color: 'hsl(240 5% 55%)' }}>
+            <Loader2 size={18} className="animate-spin" />
+          </div>
+        ) : wallets.length === 0 && !adding ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <Wallet size={26} style={{ color: 'hsl(240 5% 40%)', margin: '0 auto 8px' }} />
+            <p style={{ fontSize: 13, color: 'hsl(240 5% 55%)' }}>No wallets saved yet.</p>
+            <p style={{ fontSize: 11, color: 'hsl(240 5% 45%)', marginTop: 3 }}>Click "Add Wallet" to save your first address.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {wallets.map(w => {
+              const c = colorFor(w.network)
+              return (
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: `${c}1a`, border: `1px solid ${c}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Wallet size={17} style={{ color: c }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'hsl(40 6% 88%)' }}>
+                      {w.network}{w.label && <span style={{ fontWeight: 500, color: 'hsl(240 5% 55%)' }}> · {w.label}</span>}
+                    </p>
+                    <p title={w.address} style={{ fontSize: 11, color: 'hsl(240 5% 48%)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{w.address}</p>
+                  </div>
+                  {confirmId === w.id ? (
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => setConfirmId(null)} disabled={deletingId === w.id} style={{ fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', cursor: 'pointer' }}>Keep</button>
+                      <button onClick={() => handleDelete(w.id)} disabled={deletingId === w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 7, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', cursor: 'pointer' }}>
+                        {deletingId === w.id && <Loader2 size={11} className="animate-spin" />} Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmId(w.id)} aria-label="Remove wallet" style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                      <Trash2 size={13} style={{ color: '#f87171' }} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </Section>
     </div>
   )
