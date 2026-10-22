@@ -233,6 +233,7 @@ export function InvestmentPlans() {
                   </ul>
 
                   <button
+                  onClick={() => navigate('/dashboard/deposit')}
                     style={{ width: '100%', padding: '0.65rem', borderRadius: '0.625rem', fontSize: 13, cursor: 'pointer', transition: 'opacity 0.15s', ...ctaStyle }}
                     onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
                     onMouseLeave={e => e.currentTarget.style.opacity = '1'}
