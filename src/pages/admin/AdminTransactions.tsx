@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, CheckCircle2, X, Clock, ChevronRight, RefreshCw, ImageIcon, ExternalLink } from 'lucide-react'
+import { Search, Filter, CheckCircle2, X, Clock, ChevronRight, RefreshCw, ImageIcon, ExternalLink, Trash2 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api').replace('/api', '')
@@ -160,6 +160,19 @@ export function AdminTransactions() {
       load()
     } catch (err: any) {
       setActionMsg({ type: 'error', text: err.message ?? 'Rejection failed.' })
+    } finally { setActionId(null) }
+  }
+
+  async function remove(tx: Transaction) {
+    const label = `${TYPE_META[tx.type]?.label ?? tx.type} of $${Number(tx.amount).toLocaleString()} for ${tx.user.email}`
+    if (!window.confirm(`Delete this transaction record?\n\n${label}\n\nThis removes it from the history only; the user's balance is not changed. This cannot be undone.`)) return
+    setActionId(tx.id)
+    try {
+      await adminApi.delete(`/admin/transactions/${tx.id}`)
+      setActionMsg({ type: 'success', text: 'Transaction deleted.' })
+      load()
+    } catch (err: any) {
+      setActionMsg({ type: 'error', text: err.message ?? 'Delete failed.' })
     } finally { setActionId(null) }
   }
 
@@ -337,6 +350,10 @@ export function AdminTransactions() {
                           <button onClick={() => navigate(`/admin/users/${tx.user.id}`)}
                             style={{ padding: '4px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'hsl(240 5% 55%)', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
                             User <ChevronRight size={10} />
+                          </button>
+                          <button onClick={() => remove(tx)} disabled={busy} title="Delete transaction"
+                            style={{ padding: '4px 9px', borderRadius: 6, background: busy ? 'rgba(255,255,255,0.04)' : 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: busy ? 'hsl(240 5% 40%)' : '#f87171', fontSize: 11, fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <Trash2 size={11} /> {busy ? '…' : 'Delete'}
                           </button>
                         </div>
                       </td>
